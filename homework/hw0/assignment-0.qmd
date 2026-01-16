@@ -1,0 +1,75 @@
+---
+title: "Assignment 0: Setup & Submission Practice"
+author: "Chris Low"
+format: pdf
+jupyter: python3
+execute:
+  engine: jupyter
+---
+
+This assignment will help me learn how to submit assignments as a `pdf` using Quarto.
+
+Code cells can be created using three backticks followed by `{python}`.
+
+## C1. Hello World
+
+```{python}
+print("Hello World!")
+```
+
+## C2. Plot y = x^2
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+x = np.linspace(-10, 10, 200)
+y = x**2
+
+plt.plot(x, y)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("y = x^2")
+plt.show()
+```
+
+## C3. Plot y = x^2 (code hidden)
+```{python}
+#| echo: false
+import numpy as np
+import matplotlib.pyplot as plt
+
+x = np.linspace(-10, 10, 200)
+y = x**2
+
+plt.plot(x, y)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("y = x^2 (hidden code)")
+plt.show()
+```
+
+## Part D: LaTeX practice (math + formatting)
+
+### D1. Inline math
+
+The mean of the numbers $x_1, x_2, \ldots, x_n$ is given by $\frac{1}{n}\sum_{i=1}^n x_i$.
+
+### D2. Display math
+
+The quadratic formula is given by:
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}.
+$$
+
+### D3. Aligned equations
+
+
+\begin{align*}
+(x + 1)^2 &= (x + 1)(x + 1) \\
+          &= x^2 + 2x + 1
+\end{align*}
+
+
+### D4. LaTeX symbols
+
+The symbol $\nabla$ denotes the gradient operator, which represents the vector of partial derivatives of a scalar-valued function.
