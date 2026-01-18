@@ -3,8 +3,6 @@ title: "Assignment 0: Setup & Submission Practice"
 author: "Chris Low"
 format: pdf
 jupyter: python3
-execute:
-  engine: jupyter
 ---
 
 This assignment will help me learn how to submit assignments as a `pdf` using Quarto.

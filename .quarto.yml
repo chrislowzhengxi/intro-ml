@@ -1,0 +1,6 @@
+project:
+  type: default
+
+execute:
+  daemon: false
+  eval: true

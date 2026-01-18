@@ -1,0 +1,10 @@
+{
+  // Quarto configuration
+  "quarto.render.previewType": "internal",
+  
+  // Prevent VS Code from auto-selecting kernels for .qmd files
+  "notebook.defaultInterpreterPath": "/Users/chrislowzx/miniconda3/bin/python",
+  
+  // Python configuration - use base conda
+  "python.defaultInterpreterPath": "/Users/chrislowzx/miniconda3/bin/python"
+}
