@@ -219,7 +219,88 @@ $$
 
 # Problem 3
 
+## 3(a)
+
+The possible outcomes summing two dice to 6 are
+$$
+(1,5), (2,4), (3,3), (4,2), (5,1)
+$$
+
+which are equally likely.
+
+Only one of these outcomes has the first die equal to 2, which is $(2,4)$. Therefore,
+$$
+P(\text{first die} = 2 \mid \text{sum} = 6) = \boxed{\frac{1}{5}}
+$$
+
+## 3(b)
+
+By Bayes’ rule,
+$$
+P(P \mid T)
+=
+\frac{P(T \mid P)P(P)}{P(T)}.
+$$
+
+Substituting the given values,
+$$
+P(P \mid T)
+=
+\frac{(0.30)(0.55)}{0.45}
+=
+\frac{11}{30}
+\approx \boxed{0.367}
+$$
 
 
 
+# Problem 4
 
+```{python}
+import numpy as np
+
+# Define the face probabilities (counts / 24)
+faces = np.arange(1, 13)
+# Die B counts from table
+probs_b = np.array([3, 3, 3, 3, 3, 2, 2, 2, 1, 1, 0, 1]) / 24.0
+# Die C counts from table (all 2)
+probs_c = np.array([2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]) / 24.0
+
+def run_simulation(true_die_probs, target_odds=99):
+    log_odds = 0  # log(1) = 0 starts at equal probability
+    rolls = 0
+    # log(99) is the threshold. 
+    # Log-odds form: log(P(B)/P(C)) = Sum(log(P(x|B)) - log(P(x|C)))
+    threshold = np.log(target_odds)
+    
+    while abs(log_odds) < threshold:
+        # Roll the die
+        roll = np.random.choice(faces, p=true_die_probs)
+        idx = roll - 1
+        
+        # Update Log Odds (using log prevents underflow)
+        # Avoid log(0) by handling the 0-prob case for Die B if necessary
+        # However, if we roll using Die B, we won't roll an 11 (prob 0), so it's safe.
+        term_b = probs_b[idx]
+        term_c = probs_c[idx]
+        
+        # If the model assigns 0 prob to an outcome that happened, odds explode
+        if term_b == 0: 
+            log_odds = -np.inf # B is impossible
+        elif term_c == 0:
+            log_odds = np.inf # C is impossible
+        else:
+            log_odds += np.log(term_b) - np.log(term_c)
+            
+        rolls += 1
+        
+    return rolls
+
+# Run Monte Carlo
+n_sims = 10000
+rolls_given_b = [run_simulation(probs_b) for _ in range(n_sims)]
+rolls_given_c = [run_simulation(probs_c) for _ in range(n_sims)]
+
+print(f"Avg rolls given we are rolling B: {np.mean(rolls_given_b):.2f}")
+print(f"Avg rolls given we are rolling C: {np.mean(rolls_given_c):.2f}")
+```
