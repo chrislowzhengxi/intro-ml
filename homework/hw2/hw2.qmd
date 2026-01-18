@@ -1,0 +1,11 @@
+---
+title: "DATA 221 Homework 2"
+author: "Chris Low"
+format: pdf
+jupyter: python3
+---
+
+
+# Problem 1
+
+## 1(a)
