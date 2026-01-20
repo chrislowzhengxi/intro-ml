@@ -7,6 +7,15 @@ This project is configured so that:
 - ✅ **VS Code Interactive Window can use any kernel you select**
 - ✅ **No environment contamination between the two**
 
+## ⚠️ Critical: The YAML Configuration
+
+**Every `.qmd` file MUST include this line:**
+```yaml
+jupyter: python3
+```
+
+Without this, Quarto will default to whatever kernel it finds first (often `netml-311`), causing the PyYAML error.
+
 ---
 
 ## Configuration Files

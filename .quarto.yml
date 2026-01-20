@@ -2,5 +2,7 @@ project:
   type: default
 
 execute:
+  engine: python
+  python: /Users/chrislowzx/miniconda3/bin/python
   daemon: false
   eval: true

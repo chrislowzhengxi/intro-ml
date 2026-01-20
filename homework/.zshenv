@@ -1,0 +1,1 @@
+unset QUARTO_PYTHON
