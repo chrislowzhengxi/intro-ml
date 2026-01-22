@@ -207,11 +207,309 @@ model.fit(X_train, y_train)
 
 sklearn_preds = label_y.inverse_transform(model.predict(X_test))
 
-# Compare with manual predictions
+# KEY: Compare with manual predictions
 comparison = test["predicted_vax_status"].values == sklearn_preds
 
-print("All predictions identical:", comparison.all())
+print("Are all predictions identical?", comparison.all())
 ```
 
 
 We see that running this code confirms a 100% match between the manual calculation and the Scikit-Learn implementation.
+
+
+
+
+# Problem 2 
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from scipy.stats import norm
+```
+
+
+### 2(a)
+```{python}
+# Load Data
+iris = pd.read_csv('data/iris.csv')
+df = iris.copy()
+
+# Split (80% Train, 20% Test)
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+
+print(f"Training set size: {len(train_df)}")
+print(f"Test set size: {len(test_df)}")
+```
+
+```{python}
+print(train_df.columns.tolist())
+```
+
+```{python}
+train_df.columns = (
+    train_df.columns
+    .str.strip()
+    .str.lower()
+    .str.replace(" ", ".", regex=False)
+)
+
+test_df.columns = (
+    test_df.columns
+    .str.strip()
+    .str.lower()
+    .str.replace(" ", ".", regex=False)
+)
+```
+
+
+### 2(b)
+
+```{python}
+sns.displot(
+    data=train_df,
+    x="petal.length",
+    hue="species",
+    kind="kde",
+    fill=True
+)
+
+plt.title("Empirical Density of Petal Length by Species (Training Set)")
+plt.xlabel("Petal Length")
+plt.ylabel("Density")
+plt.show()
+```
+
+
+
+
+We plot kernel density estimates using seaborn’s KDE, which provides a smooth approximation of the empirical distribution of petal length for each species.
+
+
+### 2(c)
+```{python}
+petal_col = "petal.length"
+
+summary = (
+    train_df
+    .groupby("species")[petal_col]
+    .agg(["count", "mean", "std"])
+)
+
+print(summary)
+```
+
+
+### 2(d)
+```{python}
+x = 5.12 
+petal_col = "petal.length"
+likelihoods = {}
+
+for sp in train_df["species"].unique():
+    vals = train_df.loc[
+        train_df["species"] == sp, petal_col
+    ]
+    
+    mu = vals.mean()
+    sigma = vals.std()
+    
+    likelihoods[sp] = norm.pdf(x, loc=mu, scale=sigma)
+
+likelihoods
+```
+
+Note that each species appears roughly equally often, so 
+$P(y)$ is approximately the same and hence the prior can be ignored in Naives Bayes classification. 
+
+```{python}
+print("I would classify the species as " + max(likelihoods, key=likelihoods.get) + ".")
+```
+
+
+### 2(e)
+```{python}
+features = [
+    "sepal.length",
+    "sepal.width",
+    "petal.width"
+]
+
+for feature in features:
+    sns.displot(
+        data=train_df,
+        x=feature,
+        hue="species",
+        kind="kde",
+        fill=True
+    )
+    
+    plt.title(
+        f"Empirical Density of {feature.replace('_', ' ').title()} "
+        "by Species (Training Set)"
+    )
+    plt.xlabel(feature.replace('_', ' ').title())
+    plt.ylabel("Density")
+    plt.show()
+```
+
+
+### 2(f)
+```{python}
+x_new = {
+    "sepal.length": 5.42,
+    "sepal.width": 3.81,
+    "petal.length": 4.23,
+    "petal.width": 2.15
+}
+
+features = list(x_new.keys())
+scores = {}
+
+for sp in train_df["species"].unique():
+    subset = train_df[train_df["species"] == sp]
+    
+    log_likelihood = 0
+    
+    for feature in features:
+        mu = subset[feature].mean()
+        sigma = subset[feature].std()
+        
+        log_likelihood += np.log(
+            norm.pdf(x_new[feature], loc=mu, scale=sigma)
+        )
+    
+    # equal class priors like (d), so no need to add log(P(sp))
+    scores[sp] = log_likelihood
+
+scores
+```
+
+```{python}
+print("The species is " + max(scores, key=scores.get) + ".")
+```
+
+
+\newpage
+
+# Problem 3 
+
+### 3(a)
+```{python}
+features = ["sepal.length", "sepal.width", "petal.length", "petal.width"]
+
+predictions = []
+
+for _, row in test_df.iterrows():
+    scores = {}
+    
+    for sp in train_df["species"].unique():
+        subset = train_df[train_df["species"] == sp]
+        log_likelihood = 0
+        
+        for feature in features:
+            # Data from train
+            mu = subset[feature].mean()
+            sigma = subset[feature].std()
+            
+            # Prediction on test 
+            log_likelihood += np.log(
+                norm.pdf(row[feature], loc=mu, scale=sigma)
+            )
+        
+        scores[sp] = log_likelihood
+    
+    predictions.append(max(scores, key=scores.get))
+
+test_df = test_df.copy()
+test_df["predicted_species"] = predictions
+test_df[["species", "predicted_species"]].head()
+```
+
+### 3(b)
+```{python}
+confusion = pd.crosstab(
+    test_df["species"],
+    test_df["predicted_species"],
+    rownames=["Actual"],
+    colnames=["Predicted"]
+)
+
+confusion
+```
+
+
+### 3(c)
+```{python}
+accuracy = (
+    test_df["species"] == test_df["predicted_species"]
+).mean()
+
+print(f"Accuracy: {accuracy:.3f}")
+```
+
+
+### 3(d)
+```{python}
+errors = test_df[test_df["species"] != test_df["predicted_species"]]
+
+errors.value_counts(["species", "predicted_species"])
+```
+
+The classifier achieved 100% accuracy on the test set, so no misclassifications were made. As a result, there is no “most common” error in this evaluation. (It is possible that petal measurements, which we saw in the empirical density plots from Problem 2, show strong separation between the species in the feature space.)
+
+
+
+\newpage
+
+# Problem 4
+
+### 4(a)
+```{python}
+spam_df = pd.read_csv("data/spam.csv", encoding="latin-1")
+
+print(spam_df.columns)
+
+# Remove the unnecessary columns
+spam_df = spam_df.iloc[:, :2]
+spam_df.columns = ["label", "message"]
+
+print(spam_df.shape)
+```
+
+
+### 4(b)
+```{python}
+spam_messages = spam_df[spam_df["label"] == "spam"]
+ham_messages = spam_df[spam_df["label"] == "ham"]
+
+print("Spam messages:", len(spam_messages))
+print("Ham messages:", len(ham_messages))
+```
+
+
+### 4(c)
+```{python}
+spam_string = spam_messages["message"].str.cat(sep=" ")
+ham_string = ham_messages["message"].str.cat(sep=" ")
+
+spam_tokens = spam_string.split()
+ham_tokens = ham_string.split()
+
+print("Number of spam tokens:", len(spam_tokens))
+print("Number of ham tokens:", len(ham_tokens))
+```
+
+
+### 4(d)
+
+
+### 4(e)
+
+
+### 4(f)
+
+
+### 4(g)
