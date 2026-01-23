@@ -504,12 +504,303 @@ print("Number of ham tokens:", len(ham_tokens))
 
 
 ### 4(d)
+```{python}
+import nltk
+from nltk import FreqDist
 
+spam_freq = FreqDist(spam_tokens)
+ham_freq = FreqDist(ham_tokens)
+```
 
 ### 4(e)
+```{python}
+print("Unique tokens in spam dictionary:", len(spam_freq))
+print("Unique tokens in ham dictionary:", len(ham_freq))
+```
+
+Note: There might be small differences in the number of unique tokens due to case sensitivity and punctuation being treated as distinct tokens. I would assume that since the same preprocessing is used consistently throughout the analysis, these differences do not affect the validity of the results.
+
+```{python}
+word = "Sorry"
+
+p_sorry_ham = ham_freq[word] / sum(ham_freq.values())
+p_sorry_spam = spam_freq[word] / sum(spam_freq.values())
+
+print(f"P('Sorry' | Ham) = {p_sorry_ham:.5f}")
+print(f"P('Sorry' | Spam) = {p_sorry_spam:.5f}")
+```
 
 
 ### 4(f)
-
+```{python}
+def message_probability(message, freq_dist):
+    tokens = message.split()
+    total_tokens = sum(freq_dist.values())
+    
+    prob = 1
+    for token in tokens:
+        prob *= freq_dist[token] / total_tokens
+    
+    return prob
+```
 
 ### 4(g)
+```{python}
+# P (sentnece | ham) and P (sentence | spam)
+msg = "Sorry my roommates took forever, it ok if I come by now?"
+
+msg_clean = msg.replace(",", "").replace("?", "").lower()
+p_msg_ham = message_probability(msg_clean, ham_freq)
+p_msg_spam = message_probability(msg_clean, spam_freq)
+
+print("P(message | ham) =", p_msg_ham)
+print("P(message | spam) =", p_msg_spam)
+```
+
+
+### 4(h) 
+The ham probability is tiny because we multiply many small word probabilities. The spam probability is 0 because at least one word in the message had count 0 in the spam dictionary, so the whole product becomes 0.
+
+To address this, I assign a **fixed small penalty probability** to words with zero frequency. I intentionally avoid using a penalty that depends on the total number of tokens in each class, since the ham corpus is substantially larger than the spam corpus. A size-dependent penalty would therefore penalize unseen words in ham more severely than in spam, introducing an unintended bias. Using a constant, very small penalty instead ensures that unseen words are handled consistently across classes and that classification is driven by the relative evidence from observed words rather than differences in corpus size.
+
+
+```{python}
+total_ham = len(ham_tokens)
+total_spam = len(spam_tokens)
+
+def log_prob_word(word, freq_dist, total_tokens):
+    """
+    Returns log(P(w|Class)). 
+    Uses a fixed small penalty (1e-10) if word is not found to avoid 
+    biasing the model based on the total number of tokens in the class.
+    """
+    penalty = 1e-10
+    count = freq_dist[word]
+    
+    if count == 0:
+        return np.log(penalty)
+    
+    return np.log(count / total_tokens)
+
+
+def message_log_odds(message, ham_freq, spam_freq, total_ham, total_spam):
+    """
+    Returns log odds of message under ham vs spam, i.e.: 
+    log P(message | ham) - log P(message | spam)
+    """
+    words = message.split()
+    
+    log_ham = 0
+    log_spam = 0
+    
+    for w in words:
+        log_ham += log_prob_word(w, ham_freq, total_ham)
+        log_spam += log_prob_word(w, spam_freq, total_spam)
+    
+    return log_ham - log_spam
+```
+
+
+### 4(i)
+Using the log-likelihoods from part (h), we score each message by computing the log odds ratio of the message being ham versus spam. (i.e. return log_ham - log_spam) 
+
+Positive scores mean that messages that are more likely to be ham, while negative scores indicate messages that are more likely to be spam.
+
+```{python}
+def score_message(message):
+    """
+    Returns the log-odds score for a message being ham vs spam.
+    Positive => ham-like, Negative => spam-like.
+    """
+    return message_log_odds(
+        message,
+        ham_freq,
+        spam_freq,
+        total_ham,
+        total_spam
+    )
+```
+
+
+
+### 4(j)
+```{python}
+msg = "Sorry my roommates took forever, it ok if I come by now?"
+msg_clean = msg.replace(",", "").replace("?", "")
+
+score_j = score_message(msg_clean)
+print("Score of the message:", score_j)
+```
+
+Because the score is positive, we would predict this as Ham.
+
+
+### 4(k)
+```{python}
+spam_df["token_len"] = spam_df["message"].apply(lambda x: len(x.split()))
+short_msgs = spam_df[spam_df["token_len"] <= 50].copy()
+
+short_msgs["score"] = short_msgs["message"].apply(score_message)
+
+plt.figure(figsize=(10, 6))
+sns.histplot(
+    data=short_msgs,
+    x="score",
+    hue="label",
+    bins=30,
+    alpha=0.6,
+    kde=True
+)
+plt.xlabel("Log-Odds Score of Ham vs Spam)")
+plt.ylabel("Count")
+plt.title("Distribution of Log-Odds Scores for Ham and Spam Messages")
+plt.show()
+```
+
+
+**Description:** Ham messages tend to have larger or more positive log-odds scores, while spam messages tend to have smaller or negative scores. We do see that there is some overlap between the two distributions. However, spam messages are generally shifted toward lower values, so this shows that our scoring function is effective at separating ham from spam.
+
+
+Note: In this analysis, we compare messages using the log-likelihood ratio $\log P(\text{message} \mid \text{ham}) - \log P(\text{message} \mid \text{spam})$ and do not explicitly include class priors. Since the prior probabilities are constant across messages, omitting them does not affect the relative ordering of the scores.
+
+
+\newpage
+
+
+```{python}
+print(short_msgs.columns)
+```
+
+
+# Problem 5
+
+
+### 5(a)
+```{python}
+# Predict spam if score < 1 else ham
+short_msgs["pred_label"] = np.where(
+    short_msgs["score"] < 1, "spam", "ham"
+)
+
+cm = pd.crosstab(
+    short_msgs["label"],
+    short_msgs["pred_label"],
+    rownames=["Actual"],
+    colnames=["Predicted"]
+)
+
+cm
+```
+
+
+Computing metrics: 
+```{python}
+TP = cm.loc["spam", "spam"]
+FN = cm.loc["spam", "ham"]  
+FP = cm.loc["ham",  "spam"] 
+TN = cm.loc["ham",  "ham"]  
+
+accuracy = (TP + TN) / (TP + TN + FP + FN)
+
+# Sensitivity = TPR = recall for spam
+sensitivity = TP / (TP + FN) if (TP + FN) > 0 else np.nan
+
+# Specificity = TNR for ham
+specificity = TN / (TN + FP) if (TN + FP) > 0 else np.nan
+
+print("Confusion matrix counts:")
+print(f"TP={TP}, FN={FN}, FP={FP}, TN={TN}\n")
+
+print(f"Accuracy:     {accuracy:.4f}")
+print(f"Sensitivity:  {sensitivity:.4f}")
+print(f"Specificity:  {specificity:.4f}")
+```
+
+
+### 5(b)
+
+My versions above do not allow a flexibility in penalty. Below, I updated them to reflect that: 
+
+```{python}
+def log_prob_word(word, freq_dist, total_tokens, penalty=1e-10):
+    """
+    Returns log(P(w|Class)). 
+    Uses a fixed small penalty (1e-10).
+    """
+    count = freq_dist[word]
+    
+    if count == 0:
+        return np.log(penalty)
+    
+    return np.log(count / total_tokens)
+
+
+def message_log_odds(message, ham_freq, spam_freq, total_ham, total_spam, penalty_mult=1.0):
+    """
+    Returns log odds of message under ham vs spam.
+    """
+    words = message.split()
+    
+    log_ham = 0
+    log_spam = 0
+    
+    for w in words:
+        log_ham += log_prob_word(w, ham_freq, total_ham, penalty_mult)
+        log_spam += log_prob_word(w, spam_freq, total_spam, penalty_mult)
+    
+    return log_ham - log_spam
+
+def score_message(message, penalty_mult=1.0):
+    """
+    Log-odds score for ham vs spam.
+    """
+    return message_log_odds(
+        message,
+        ham_freq,
+        spam_freq,
+        total_ham,
+        total_spam,
+        penalty_mult
+    )
+```
+
+
+Now modifying to different errors: 
+```{python}
+from sklearn.metrics import confusion_matrix, accuracy_score
+
+
+spam_df["token_len"] = spam_df["message"].apply(lambda x: len(x.split()))
+short_msgs = spam_df[spam_df["token_len"] <= 50].copy()
+
+
+penalties = [1e-5, 1e-10, 1e-20]
+
+print(f"{'Penalty':<12} | {'Accuracy':<10} | {'Sensitivity':<12} | {'Specificity':<11}")
+print("-" * 60)
+
+for penalty in penalties:
+    # Recompute scores
+    scores = short_msgs["message"].apply(lambda x: score_message(x, penalty_mult=penalty))
+    
+    # Predict spam if score < 1
+    preds = scores.apply(lambda x: 1 if x < 1 else 0)  # 1=spam, 0=ham
+    
+    # Confusion matrix (spam is positive)
+    y_true = short_msgs["label"].map({"spam": 1, "ham": 0})
+
+    cm = confusion_matrix(y_true, preds, labels=[1, 0])
+    tp, fn = cm[0]
+    fp, tn = cm[1]
+    
+    accuracy = accuracy_score(y_true, preds)
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else np.nan
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
+    
+    print(f"{penalty:<12} | {accuracy:<10.4f} | {sensitivity:<12.4f} | {specificity:<11.4f}")
+```
+
+
+**Interpretation:** As the penalty for unseen words becomes smaller (e.g. towards power of -20), spam messages containing rare or unseen tokens are penalized more heavily. This makes them easier to identify. 
+
+This **increases sensitivity** (how many real spam messages we correctly catch), eventually reaching 1.0, while **specificity** (how many real ham messages we correctly keep as ham) remains largely **unchanged** because ham messages tend to consist of more common words. Overall **accuracy increases only slightly** since the classifier already performs well on the majority of messages.
