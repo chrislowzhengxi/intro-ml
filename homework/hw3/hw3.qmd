@@ -1,0 +1,304 @@
+---
+title: "DATA 221 Homework 2"
+author: "Chris Low"
+format: pdf
+execute:
+  engine: python
+  python: /Users/chrislowzx/miniconda3/bin/python
+---
+
+
+# Problem 1
+
+### 1(a)
+They are **ordinal categorical variables**. They are categories with a meaningful order (e.g., Worsened less than Unchanged less than Improved). There is a natural order but not we do not have a numerical sense to it.
+
+
+### 1(b)
+```{python}
+import pandas as pd
+import statsmodels.api as sm
+
+train_df = pd.read_csv('../hw2/data/PCC_study_train.csv')
+
+# (One-Hot Encoding)
+X_cat = pd.get_dummies(train_df[['WBscore', 'PCCsymp']], drop_first=True)
+X_cat = X_cat.astype(float)
+X_cat = sm.add_constant(X_cat)
+
+y = train_df['vax_status'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+# Train Model
+log_reg_cat = sm.Logit(y, X_cat).fit()
+
+# View Summary to find significant variables
+print(log_reg_cat.summary())
+```
+
+If we treat WBscore and PCCsymp as categorical variables, we find that **WBscore_Unchanged, PCCsymp_More, and PCCsymp_Same are statistically significant predictors** of vaccination status, while **WBscore_Worsened** is not significant.
+
+
+### 1(c) 
+Instead of creating many dummy columns, like we did in (b), we are creating two numeric columns, WBscore_num and PCCsymp_num.
+
+```{python}
+train_df = pd.read_csv('../hw2/data/PCC_study_train.csv')
+
+y = train_df['vax_status'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+wb_map  = {'Worsened': 0, 'Unchanged': 1, 'Improved': 2}
+pcc_map = {'More': 0, 'Same': 1, 'Less': 2}
+
+train_df['WBscore_num'] = train_df['WBscore'].map(wb_map)
+train_df['PCCsymp_num'] = train_df['PCCsymp'].map(pcc_map)
+
+X_num = train_df[['WBscore_num', 'PCCsymp_num']]
+X_num = sm.add_constant(X_num)
+
+log_reg_num = sm.Logit(y, X_num).fit()
+
+print(log_reg_num.summary())
+```
+
+If we treat WBscore and PCCsymp as numeric variables, we find that PCCsymp is a statistically significant predictor of vaccination status, while WBscore is not significant at the 5% level. (Alternatively, we can say that WBscore is marginally significant ($p \approx 0.05$), while PCCsymp is clearly significant.) 
+
+
+
+### 1(d)
+```{python}
+from sklearn.metrics import roc_curve, auc
+
+test_df = pd.read_csv('../hw2/data/PCC_study_test.csv')
+
+y_test = test_df['vax_status2'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+# Model from 1(b): 
+X_test_cat = pd.get_dummies(
+    test_df[['WBscore', 'PCCsymp']],
+    drop_first=True
+)
+
+X_test_cat = X_test_cat.reindex(
+    columns=X_cat.columns.drop('const'),
+    fill_value=0
+)
+
+X_test_cat = sm.add_constant(X_test_cat)
+X_test_cat = X_test_cat.astype(float)  
+
+# Using train log_reg_cat to predict
+y_prob_cat = log_reg_cat.predict(X_test_cat)
+
+fpr_cat, tpr_cat, _ = roc_curve(y_test, y_prob_cat)
+auc_cat = auc(fpr_cat, tpr_cat)
+
+print("Categorical AUC:", auc_cat)
+```
+
+
+```{python}
+wb_map  = {'Worsened': 0, 'Unchanged': 1, 'Improved': 2}
+pcc_map = {'More': 0, 'Same': 1, 'Less': 2}
+
+test_df['WBscore_num'] = test_df['WBscore'].map(wb_map)
+test_df['PCCsymp_num'] = test_df['PCCsymp'].map(pcc_map)
+
+X_test_num = test_df[['WBscore_num', 'PCCsymp_num']]
+X_test_num = sm.add_constant(X_test_num)
+
+y_prob_num = log_reg_num.predict(X_test_num)
+
+fpr_num, tpr_num, _ = roc_curve(y_test, y_prob_num)
+auc_num = auc(fpr_num, tpr_num)
+
+print("Numerical AUC:", auc_num)
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+
+plt.figure()
+plt.plot(fpr_cat, tpr_cat, label=f'Categorical Model (AUC = {auc_cat:.3f})')
+plt.plot(fpr_num, tpr_num, label=f'Numeric Model (AUC = {auc_num:.3f})')
+plt.plot([0,1], [0,1], linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.show()
+
+print("AUC (categorical):", auc_cat)
+print("AUC (numeric):", auc_num)
+```
+
+I recommend the **Categorical Model**. It achieves a higher AUC, which means that it captures non-linear relationships between the specific categories (like "Unchanged" vs "Improved") better than the linear assumption of the numeric model.
+
+
+
+# Problem 2 
+
+### 2(a) 
+```{python}
+# Prep data: pasted from above
+train_df = pd.read_csv('../hw2/data/PCC_study_train.csv')
+
+y_train = train_df['vax_status'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+wb_map  = {'Worsened': 0, 'Unchanged': 1, 'Improved': 2}
+pcc_map = {'More': 0, 'Same': 1, 'Less': 2}
+
+train_df['WBscore_num'] = train_df['WBscore'].map(wb_map)
+train_df['PCCsymp_num'] = train_df['PCCsymp'].map(pcc_map)
+
+X_train = train_df[['WBscore_num', 'PCCsymp_num']]
+```
+
+
+I will play around with gini and entropy, keeping max_depth at 3 to prevent overfitting.
+```{python}
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import plot_tree
+
+tree = DecisionTreeClassifier(
+    criterion='gini',     
+    max_depth=3,           
+    random_state=42
+)
+
+tree.fit(X_train, y_train)
+
+plt.figure(figsize=(12,6))
+plot_tree(
+    tree,
+    feature_names=['WBscore', 'PCCsymp'],
+    class_names=['Unvaccinated', 'Vaccinated'],
+    filled=True
+)
+plt.show()
+```
+
+```{python}
+test_df = pd.read_csv('../hw2/data/PCC_study_test.csv')
+
+y_test = test_df['vax_status2'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+test_df['WBscore_num'] = test_df['WBscore'].map(wb_map)
+test_df['PCCsymp_num'] = test_df['PCCsymp'].map(pcc_map)
+
+X_test = test_df[['WBscore_num', 'PCCsymp_num']]
+
+y_prob_tree = tree.predict_proba(X_test)[:, 1]
+
+fpr_tree, tpr_tree, _ = roc_curve(y_test, y_prob_tree)
+auc_tree = auc(fpr_tree, tpr_tree)
+
+plt.figure()
+plt.plot(fpr_tree, tpr_tree, label=f'Decision Tree (AUC = {auc_tree:.3f})')
+plt.plot([0,1], [0,1], linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.show()
+
+print("Decision Tree AUC:", auc_tree)
+```
+
+Now I will try entropy with max_depth = 5:
+```{python}
+dt_model = DecisionTreeClassifier(criterion='entropy', max_depth=5, random_state=42) 
+dt_model.fit(X_train, y_train)
+
+plt.figure(figsize=(12,6))
+plot_tree(
+    dt_model,
+    feature_names=['WBscore', 'PCCsymp'],
+    class_names=['Unvaccinated', 'Vaccinated'],
+    filled=True
+)
+plt.show()
+
+test_df = pd.read_csv('../hw2/data/PCC_study_test.csv')
+
+y_test = test_df['vax_status2'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+test_df['WBscore_num'] = test_df['WBscore'].map(wb_map)
+test_df['PCCsymp_num'] = test_df['PCCsymp'].map(pcc_map)
+
+X_test = test_df[['WBscore_num', 'PCCsymp_num']]
+
+y_prob_tree = dt_model.predict_proba(X_test)[:, 1]
+
+fpr_tree, tpr_tree, _ = roc_curve(y_test, y_prob_tree)
+auc_tree = auc(fpr_tree, tpr_tree)
+
+plt.figure()
+plt.plot(fpr_tree, tpr_tree, label=f'Decision Tree (AUC = {auc_tree:.3f})')
+plt.plot([0,1], [0,1], linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.show()
+
+print("Decision Tree AUC (Entropy):", auc_tree)
+```
+
+
+We trained a decision tree classifier using the entropy criterion with a maximum depth of 5. The tree shows that symptom improvement (PCCsymp) is the most important predictor of vaccination status. 
+
+Using predicted probabilities on the test set, the ROC curve yields an AUC of 0.843, which shows a strong classification performance.
+
+
+### 2(b) 
+```{python}
+from sklearn.naive_bayes import CategoricalNB
+
+train_df = pd.read_csv('../hw2/data/PCC_study_train.csv')
+test_df  = pd.read_csv('../hw2/data/PCC_study_test.csv')
+
+y_train = train_df['vax_status'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+y_test  = test_df['vax_status2'].map({'Unvaccinated': 0, 'Vaccinated': 1})
+
+wb_map  = {'Worsened': 0, 'Unchanged': 1, 'Improved': 2}
+pcc_map = {'More': 0, 'Same': 1, 'Less': 2}
+
+train_df['WBscore_num'] = train_df['WBscore'].map(wb_map)
+train_df['PCCsymp_num'] = train_df['PCCsymp'].map(pcc_map)
+
+test_df['WBscore_num'] = test_df['WBscore'].map(wb_map)
+test_df['PCCsymp_num'] = test_df['PCCsymp'].map(pcc_map)
+
+X_train = train_df[['WBscore_num', 'PCCsymp_num']]
+X_test  = test_df[['WBscore_num', 'PCCsymp_num']]
+
+nb = CategoricalNB()
+nb.fit(X_train, y_train)
+
+y_prob_nb = nb.predict_proba(X_test)[:, 1]
+```
+
+```{python}
+fpr_nb, tpr_nb, _ = roc_curve(y_test, y_prob_nb)
+auc_nb = auc(fpr_nb, tpr_nb)
+
+plt.figure()
+plt.plot(fpr_nb, tpr_nb, label=f'Naive Bayes (AUC = {auc_nb:.3f})')
+plt.plot([0,1], [0,1], linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.show()
+
+print("Naive Bayes AUC:", auc_nb)
+```
+
+After we trained a Categorical Naive Bayes classifier to predict vaccination status, the predicted probabilities on the test set were used to construct an ROC curve, and the resulting AUC was approximately 0.8795.
+
+
+
+### 2(c) 
+The $\text{AUC Logistic (categorical)} \approx 0.883$, $\text{AUC Logistic (numeric)} \approx 0.863$, the entropy decision tree givce $\text{AUC Decision Tree} \approx 0.843$, and $\text{AUC Naive Bayes} \approx 0.8795$.
+
+The **categorical logistic regression model** performs best on this dataset, with the highest test AUC of approximately 0.883. 
+
+Treating the survey responses as separate categories appears to capture the relationship with vaccination status more effectively than imposing a numeric structure. The Naive Bayes model performs similarly, which is not surprising given the small sample size and categorical nature of the features. The decision tree shows slightly lower performance, likely due to overfitting and limited generalization from the relatively small training set.
+
