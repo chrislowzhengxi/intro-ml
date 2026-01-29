@@ -302,3 +302,300 @@ The **categorical logistic regression model** performs best on this dataset, wit
 
 Treating the survey responses as separate categories appears to capture the relationship with vaccination status more effectively than imposing a numeric structure. The Naive Bayes model performs similarly, which is not surprising given the small sample size and categorical nature of the features. The decision tree shows slightly lower performance, likely due to overfitting and limited generalization from the relatively small training set.
 
+
+
+\newpage
+
+# Problem 3
+
+Let $y_i$ be a single observation and let $\hat p_i$ denote the predicted probability.
+
+### 3(a) 
+The predicted log odds of $y_i$ occurring in terms of $\hat p_i$ are
+$$
+\boxed{\log\left(\frac{\hat p_i}{1 - \hat p_i}\right)}
+$$
+
+
+### 3(b)
+
+Let the predicted log odds be denoted by $\ell_i$, where
+$$
+\ell_i = \log\left(\frac{\hat p_i}{1 - \hat p_i}\right).
+$$
+
+Removing the log: 
+$$
+e^{\ell_i} = \frac{\hat p_i}{1 - \hat p_i}.
+$$
+
+$$
+e^{\ell_i}(1 - \hat p_i) = \hat p_i.
+$$
+
+$$
+e^{\ell_i} - e^{\ell_i}\hat p_i = \hat p_i
+\quad\Rightarrow\quad
+e^{\ell_i} = \hat p_i(1 + e^{\ell_i}).
+$$
+
+So, 
+$$
+\boxed{\hat p_i = \frac{e^{\ell_i}}{1 + e^{\ell_i}}}
+$$
+
+
+
+### 3(c)
+Using the same notation, we have
+$$
+\boxed{1 - \hat p_i = \frac{1}{1 + e^{\ell_i}}}
+$$
+
+
+### 3(d)
+
+For likelihood for a Bernoulli variable, we have:
+$$
+L = P(y_i | \hat p_i) = \hat p_i ^ {y_i} (1 - \hat p_i)^{1 - y_i}
+$$
+
+Therefore, for the Bernoulli log likelihood: 
+For a single observation, the Bernoulli log likelihood is
+$$
+\log L = y_i \log(\hat p_i) + (1-y_i)\log(1-\hat p_i).
+$$
+
+From (b) and (c), we have: 
+$$
+\hat p_i = \frac{e^{\ell_i}}{1+e^{\ell_i}},
+\qquad
+1-\hat p_i = \frac{1}{1+e^{\ell_i}}.
+$$
+
+$$
+\log L
+= y_i \log\left(\frac{e^{\ell_i}}{1+e^{\ell_i}}\right)
++ (1-y_i)\log\left(\frac{1}{1+e^{\ell_i}}\right).
+$$
+
+
+$$
+\log\left(\frac{e^{\ell_i}}{1+e^{\ell_i}}\right)
+= \ell_i - \log(1+e^{\ell_i}),
+\qquad
+\log\left(\frac{1}{1+e^{\ell_i}}\right)
+= -\log(1+e^{\ell_i}).
+$$
+
+
+$$
+\log L
+= y_i\left(\ell_i - \log(1+e^{\ell_i})\right) + (1-y_i)\left(-\log(1+e^{\ell_i})\right)
+= \boxed{y_i\ell_i - \log(1+e^{\ell_i}).}
+$$
+
+Finally, since $\ell_i = \beta_0 + \beta_1 x_{1i} + \cdots + \beta_p x_{pi}$ and from (a) we got $\ell_i = \log\left(\frac{\hat p_i}{1-\hat p_i}\right)$, we obtain
+$$
+\log L
+= y_i(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_p x_{pi})
+- \log\left(1 + e^{\beta_0 + \beta_1 x_{1i} + \cdots + \beta_p x_{pi}}\right),
+$$
+which matches the stated log likelihood.
+
+
+
+
+### 3(e)
+From part (d), for a single observation,
+$$
+\log L = y_i\ell_i - \log(1+e^{\ell_i}).
+$$
+
+The cross entropy loss is the negative log likelihood:
+$$
+\text{CE}(\ell_i) = -\log L = -y_i\ell_i + \log(1+e^{\ell_i}).
+$$
+
+Differentiate with respect to $\ell_i$:
+$$
+\frac{d}{d\ell_i}\text{CE}(\ell_i)
+= \frac{d}{d\ell_i}(-y_i\ell_i) + \frac{d}{d\ell_i}\log(1+e^{\ell_i})
+= -y_i + \frac{e^{\ell_i}}{1+e^{\ell_i}}.
+$$
+
+Finally, from (b), we know that $\hat p_i = \frac{e^{\ell_i}}{1+e^{\ell_i}}$, so: 
+$$
+\frac{d}{d\ell_i}\text{CE}(\ell_i) = \hat p_i - y_i = -(y_i - \hat p_i),
+$$
+which is the negative residual (residual is defined as $y_i - \hat p_i$).
+
+
+
+### 3(f)
+From part (d), for a single observation,
+$$
+\log L(\ell_i) = y_i\ell_i - \log(1+e^{\ell_i}).
+$$
+
+
+From part (e), we differntiate it with $\ell_i$:
+$$
+\frac{d}{d\ell_i}\log L
+= y_i - \frac{e^{\ell_i}}{1+e^{\ell_i}}.
+$$
+
+
+Take the second derivative. The $y_i$ term is constant, so we differentiate only the fraction. Using the quotient rule with
+$f(\ell_i)=e^{\ell_i}$ and $g(\ell_i)=1+e^{\ell_i}$, so $f'(\ell_i)=e^{\ell_i}$ and $g'(\ell_i)=e^{\ell_i}$): 
+$$
+\frac{d}{d\ell_i}\left(\frac{e^{\ell_i}}{1+e^{\ell_i}}\right)
+= \frac{e^{\ell_i}(1+e^{\ell_i}) - e^{\ell_i}\cdot e^{\ell_i}}{(1+e^{\ell_i})^2}
+= \frac{e^{\ell_i}}{(1+e^{\ell_i})^2}.
+$$
+
+Hence,
+$$
+\frac{d^2}{d\ell_i^2}\log L
+= -\frac{e^{\ell_i}}{(1+e^{\ell_i})^2}.
+$$
+
+Finally, rewriting it with the predicted probability from part (b), we have $\hat p_i = \frac{e^{\ell_i}}{1+e^{\ell_i}}$ and $1-\hat p_i = \frac{1}{1+e^{\ell_i}}$:
+$$
+\hat p_i(1-\hat p_i) = \frac{e^{\ell_i}}{(1+e^{\ell_i})^2},
+$$
+
+Therefore:
+$$
+\boxed{\frac{d^2}{d\ell_i^2}\log L = -\hat p_i(1-\hat p_i).}
+$$
+
+\newpage
+
+
+# Problem 4
+
+### 4(a)
+$$
+f(x,y)=2x^4+y^4-x^2-3y^2+0.56.
+$$
+
+Taking partial derivatives: 
+$$
+\frac{\partial f}{\partial x}=8x^3-2x
+\quad\text{and}\quad
+\frac{\partial f}{\partial y}=4y^3-6y.
+$$
+Therefore, the gradient of \(f(x,y)\) is
+$$
+\boxed{\nabla f(x,y)=\left(8x^3-2x,\;4y^3-6y\right)}
+$$
+
+
+## 4(b)
+```{python}
+def f(x, y):
+    return 2*x**4 + y**4 - x**2 - 3*y**2 + 0.56
+
+def grad_f(x, y):
+    """
+    Gradient of f(x,y) = 2x^4 + y^4 - x^2 - 3y^2 + 0.56
+    """
+    dfdx = 8*x**3 - 2*x
+    dfdy = 4*y**3 - 6*y
+    return dfdx, dfdy
+
+
+def gradient_descent(x0, y0, step_size, K):
+    """
+    Perform K steps of gradient descent starting from (x0, y0)
+    using a constant step size.
+    
+    Returns: list of (x, y, f(x,y)) tuples.
+    """
+    x = float(x0)
+    y = float(y0)
+    
+    path = [(x, y, f(x, y))]
+    
+    for _ in range(K):
+        gx, gy = grad_f(x, y)
+        x = x - step_size * gx
+        y = y - step_size * gy
+        path.append((x, y, f(x, y)))
+        
+    return path
+```
+
+
+### 4(c)
+```{python}
+path_c = gradient_descent(2, 4, 0.01, 15)
+final_x, final_y, final_val = path_c[-1]
+
+print("Final location:", (final_x, final_y))
+print("Function value:", final_val)
+```
+
+
+### 4(d)
+```{python}
+path_d = gradient_descent(2, 4, 0.02, 15)
+x15_d, y15_d, final_val_d = path_d[-1]
+
+print("Final location:", (x15_d, y15_d))
+print("Function value:", final_val_d)
+```
+
+
+### 4(e)
+```{python}
+path_e = gradient_descent(-1, -1, 0.01, 15)
+x15_e, y15_e, final_val_e = path_e[-1]
+
+print("Final location:", (x15_e, y15_e))
+print("Function value:", final_val_e)
+```
+
+
+### 4(f)
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+def f(x, y):
+    return 2*x**4 + y**4 - x**2 - 3*y**2 + 0.56
+
+x = np.linspace(-2, 2, 400)
+y = np.linspace(-2, 2, 400)
+X, Y = np.meshgrid(x, y)
+Z = f(X, Y)
+
+# Surface 
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+ax.plot_surface(X, Y, Z)
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('f(x,y)')
+plt.show()
+
+# Contour
+plt.figure()
+plt.contour(X, Y, Z, levels=30)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Contour plot of f(x,y)')
+plt.show()
+```
+
+
+**Interpreation:**
+**(c)**
+Starting from $(2,4)$ with a small step size, the algorithm moves gradually and stays in the upper valley of the surface. From the contour plot, it makes sense that it ends near the local minimum with positive (y), since it never crosses into another basin.
+
+**(d)**
+When the step size is increased, the updates become larger and the path jumps across the contours near $y=0$. As a result, the algorithm ends up in a different valley, which explains why it converges to a minimum with negative $y$.
+
+**(e)**
+Starting at $(-1,-1)$, the point is already inside the lower basin shown in the contour plot. Because of this, gradient descent stays in that region and converges to the a similar minimum as in part (d).
