@@ -267,3 +267,310 @@ The second term is exactly an **L2 regularization (ridge) penalty**, with regula
 
 ### 1(k)
 The prior controls how large the model coefficients are allowed to be. A strong prior (small $\tau^2$) implies a strong penalty, shrinking the coefficients toward zero and  making the model simpler and less sensitive to noise. This **reduces variance but can increase bias** if the model becomes too constrained. A weak prior (large $\tau^2$) allows larger coefficients and a more flexible model, which can **reduce bias but increase variance and the risk of overfitting**. Thus, the prior variance determines the bias–variance tradeoff.
+
+\newpage
+
+# Problem 2
+
+### 2(a)
+```{python}
+import numpy as np
+
+def entropy(y):
+    """
+    Computes entropy for a binary response vector y.
+    """
+    n = len(y)
+    if n == 0:
+        return 0.0
+
+    p1 = np.mean(y)
+    p0 = 1 - p1
+
+    eps = 1e-12
+    ent = 0.0
+    if p1 > 0:
+        ent -= p1 * np.log2(p1 + eps)
+    if p0 > 0:
+        ent -= p0 * np.log2(p0 + eps)
+
+    return ent
+
+def gini(y):
+    """
+    Computes Gini impurity for a binary response vector y.
+    """
+    p1 = np.mean(y)
+    p0 = 1 - p1
+    return 1 - (p1**2 + p0**2)
+
+def information_gain(y_parent, y_left, y_right, criterion="entropy"):
+    """
+    Computes information gain from splitting y_parent
+    into y_left and y_right.
+    
+    criterion: "entropy" or "gini"
+    """
+    n = len(y_parent)
+    n_left = len(y_left)
+    n_right = len(y_right)
+
+    if criterion == "entropy":
+        impurity = entropy
+    elif criterion == "gini":
+        impurity = gini
+    else:
+        raise ValueError("criterion must be 'entropy' or 'gini'")
+
+    parent_impurity = impurity(y_parent)
+    left_impurity = impurity(y_left)
+    right_impurity = impurity(y_right)
+
+    weighted_child_impurity = (
+        (n_left / n) * left_impurity +
+        (n_right / n) * right_impurity
+    )
+
+    return parent_impurity - weighted_child_impurity
+```
+
+
+
+### 2(b)
+Choose two candidate split features with corresponding split values:
+```{python}
+# I will reload data just in case 
+
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+
+bc = load_breast_cancer()
+X = bc.data
+y = bc.target
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+def split_labels(X, y, feature, threshold):
+    left_mask = X[:, feature] <= threshold
+    right_mask = X[:, feature] > threshold
+    return y[left_mask], y[right_mask]
+
+feature_1 = 0
+threshold_1 = np.median(X_train[:, feature_1])
+
+feature_2 = 7
+threshold_2 = np.median(X_train[:, feature_2])
+
+y_left_1, y_right_1 = split_labels(X_train, y_train, feature_1, threshold_1)
+y_left_2, y_right_2 = split_labels(X_train, y_train, feature_2, threshold_2)
+
+ig_entropy_1 = information_gain(y_train, y_left_1, y_right_1, "entropy")
+ig_gini_1 = information_gain(y_train, y_left_1, y_right_1, "gini")
+
+ig_entropy_2 = information_gain(y_train, y_left_2, y_right_2, "entropy")
+ig_gini_2 = information_gain(y_train, y_left_2, y_right_2, "gini")
+
+print("Root split results:")
+print("Feature 0 | Entropy IG:", ig_entropy_1, "Gini IG:", ig_gini_1)
+print("Feature 7 | Entropy IG:", ig_entropy_2, "Gini IG:", ig_gini_2)
+```
+
+
+```{python}
+best_feature = 7
+best_threshold = threshold_2
+
+left_mask = X_train[:, best_feature] <= best_threshold
+X_left = X_train[left_mask]
+y_left = y_train[left_mask]
+```
+
+
+```{python}
+# Candidate splits at depth 2
+feature_3 = 2
+threshold_3 = np.median(X_left[:, feature_3])
+
+feature_4 = 12
+threshold_4 = np.median(X_left[:, feature_4])
+
+y_ll_3, y_lr_3 = split_labels(X_left, y_left, feature_3, threshold_3)
+y_ll_4, y_lr_4 = split_labels(X_left, y_left, feature_4, threshold_4)
+
+ig_entropy_3 = information_gain(y_left, y_ll_3, y_lr_3, "entropy")
+ig_gini_3 = information_gain(y_left, y_ll_3, y_lr_3, "gini")
+
+ig_entropy_4 = information_gain(y_left, y_ll_4, y_lr_4, "entropy")
+ig_gini_4 = information_gain(y_left, y_ll_4, y_lr_4, "gini")
+
+print("\nDepth-2 split results (left child):")
+print("Feature 2 | Entropy IG:", ig_entropy_3, "Gini IG:", ig_gini_3)
+print("Feature 12 | Entropy IG:", ig_entropy_4, "Gini IG:", ig_gini_4)
+```
+
+
+Two candidate splits were evaluated at the root using **features 0 and 7**, with thresholds set to the **median** of each feature. **Feature 7 produced higher information gain under both entropy and Gini impurity, so it was selected as the root split.** 
+
+The data were then restricted to the left child node, and two additional candidate splits using features 2 and 12 were evaluated. At this level, feature 2 resulted in the larger information gain and was therefore chosen as the second split. This process shows a greedy splitting strategy, where the best local split is selected at each depth.
+
+
+
+### 2(c)
+The greedy splitting procedure used in decision trees makes a sequence of **locally optimal decisions**. At each node, the algorithm chooses the split that maximizes information gain at that step, without considering how this choice might affect future splits. Once a split is made, it is never revisited.
+
+In contrast, gradient-based methods such as logistic regression **optimize a single global objective function**. The model parameters are updated gradually using gradient information, and earlier decisions can be adjusted as the optimization continues. 
+
+This allows gradient-based methods to trade off different parts of the model jointly, whereas greedy tree construction focuses only on immediate improvements.
+In other words, trees choose questions one at a time, while gradient methods slowly tune all parameters together.
+
+
+
+\newpage
+
+
+# Problem 3
+### 3(a) 
+
+```{python}
+import time
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+dt = DecisionTreeClassifier(random_state=42)
+
+param_grid = {
+    "max_depth": [3, 5, 7, None],          # 4 values
+    "min_samples_split": [2, 5, 10, 20],   # 4 values
+    "min_samples_leaf": [1, 2, 5, 10]      # 4 values
+}
+
+# Total parameter combinations = 4 * 4 * 4 = 64
+
+# GridSearchCV
+start_time = time.time()
+
+grid_search = GridSearchCV(
+    estimator=dt,
+    param_grid=param_grid,
+    cv=5,
+    scoring="accuracy",
+    n_jobs=-1
+)
+
+grid_search.fit(X_train, y_train)
+grid_time = time.time() - start_time
+
+# RandomizedSearchCV
+# n_iter = 64 so total fits match GridSearchCV
+start_time = time.time()
+
+random_search = RandomizedSearchCV(
+    estimator=dt,
+    param_distributions=param_grid,
+    n_iter=64,
+    cv=5,
+    scoring="accuracy",
+    random_state=42,
+    n_jobs=-1
+)
+
+random_search.fit(X_train, y_train)
+random_time = time.time() - start_time
+
+print("Grid Search Results")
+print("-------------------")
+print(f"Best CV Accuracy: {grid_search.best_score_:.4f}")
+print(f"Best Parameters: {grid_search.best_params_}")
+print(f"Runtime: {grid_time:.4f} seconds\n")
+
+print("Randomized Search Results")
+print("-------------------------")
+print(f"Best CV Accuracy: {random_search.best_score_:.4f}")
+print(f"Best Parameters: {random_search.best_params_}")
+print(f"Runtime: {random_time:.4f} seconds")
+```
+
+
+Both methods found the exact same model and achieved the same CV accuracy (0.9341), which means randomized search did not miss anything important in this case. The big difference is runtime. Grid search took much longer because it exhaustively evaluated every combination in the grid, while randomized search happened to sample the optimal combination early and did not need to check everything else. With a small search space, both methods often end up with the same answer, but randomized search can still be faster because it avoids unnecessary evaluations.
+
+
+### 3(b)
+```{python}
+import matplotlib.pyplot as plt
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+
+base_tree = DecisionTreeClassifier(random_state=42)
+base_tree.fit(X_train, y_train)
+
+path = base_tree.cost_complexity_pruning_path(X_train, y_train)
+ccp_alphas = path.ccp_alphas
+impurities = path.impurities
+
+
+# Drop last alpha (root has highest alpha))
+ccp_alphas = ccp_alphas[:-1]
+impurities = impurities[:-1]
+
+cv_means = []
+train_accs = []
+
+for a in ccp_alphas:
+    clf = DecisionTreeClassifier(random_state=42, ccp_alpha=a)
+    scores = cross_val_score(clf, X_train, y_train, cv=5, scoring="accuracy")
+    cv_means.append(scores.mean())
+
+    clf.fit(X_train, y_train)
+    train_pred = clf.predict(X_train)
+    train_accs.append(accuracy_score(y_train, train_pred))
+
+cv_means = np.array(cv_means)
+train_accs = np.array(train_accs)
+
+plt.figure()
+plt.plot(ccp_alphas, cv_means, marker="o", label="CV accuracy")
+plt.plot(ccp_alphas, train_accs, marker="o", label="Train accuracy")
+plt.xscale("log")
+plt.xlabel("ccp_alpha (log scale)")
+plt.ylabel("Accuracy")
+plt.title("Decision tree performance vs pruning strength")
+plt.legend()
+plt.show()
+```
+
+
+
+### 3(c)
+We select the value of $\alpha$ that maximizes cross-validated accuracy because it provides the best estimate of of how well that level of pruning will perform on new, unseen data, without using the test set.
+
+```{python}
+best_idx = int(np.argmax(cv_means))
+best_alpha = float(ccp_alphas[best_idx])
+
+pruned_tree = DecisionTreeClassifier(random_state=42, ccp_alpha=best_alpha)
+pruned_tree.fit(X_train, y_train)
+
+test_pred = pruned_tree.predict(X_test)
+test_acc = accuracy_score(y_test, test_pred)
+
+print("Chosen alpha:", best_alpha)
+print("CV accuracy at chosen alpha:", cv_means[best_idx])
+print("Test accuracy:", test_acc)
+print("\nConfusion matrix:\n", confusion_matrix(y_test, test_pred))
+print("\nClassification report:\n", classification_report(y_test, test_pred))
+```
+
+Using cost-complexity pruning, I selected $\alpha = 0.0087$ based on cross-validated accuracy. The resulting pruned tree achieved a test accuracy of $95.6\%$, with high precision and recall for both classes. 
+
+
+
+### 3(d)
+Cost-complexity pruning and regularization both control overfitting by **adding an explicit penalty for model complexity.** In decision trees, pruning penalizes the number of terminal nodes, so increasing $\alpha$ removes branches and produces a smaller, simpler tree. 
+
+In logistic regression, regularization penalizes the size of the coefficients 
+(such as using L1 or L2 regularization), shrinking them toward zero and limiting how strongly the model can respond to individual features. In both cases, a stronger penalty trades some training accuracy for reduced variance, leading to better generalization.
