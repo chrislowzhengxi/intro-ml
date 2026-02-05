@@ -69,7 +69,7 @@ $$
 \boxed{\sum_{i=1}^n \Big[ y_i \log(p_i) + (1-y_i)\log(1-p_i)\Big].}
 $$
 
-where $p_i = \sum_{j=1}^d \sigma(w_j X_{ij})$.
+where $p_i = \sigma(w^\top X_i)$.
 
 
 ### 1(e)
@@ -193,10 +193,21 @@ print("GD intercept:", b_hat)
 print("Sklearn intercept:", b_sklearn)
 ```
 
-Both models minimize the same cross-entropy objective, but they behave differently during optimization. The breast cancer data are close to linearly separable, so an unregularized logistic regression (sklearn) fit can keep increasing the magnitude of the coefficients to push the training loss closer to zero. **In contrast, the gradient descent implementation stops once the improvement in loss becomes negligible, as enforced by the stopping rule**
-`abs(losses[-2] - losses[-1]) < tol`.
 
-As a result, the gradient descent solution has finite, moderate coefficients and a slightly higher loss, while sklearn continues toward very large coefficient values. Despite these differences, both models yield similar predictions and decision boundaries.
+Run some predictions to compare: 
+```{python}
+pred_gd = (sigmoid(X_train_std @ w_hat + b_hat) >= 0.5).astype(int)
+pred_sklearn = clf.predict(X_train_std)
+
+print("Train agreement:", np.mean(pred_gd == pred_sklearn))
+print("Train acc GD:", np.mean(pred_gd == y_train))
+print("Train acc sklearn:", np.mean(pred_sklearn == y_train))
+
+```
+
+Both models are minimizing the same cross-entropy loss, but they end up behaving differently during optimization. The breast cancer data are close to linearly separable, so when using sklearn’s logistic regression with very weak regularization, the optimizer can keep increasing the size of the coefficients to push the training loss closer and closer to zero. 
+
+In my gradient descent implementation, I stop updating once the improvement in loss becomes very small, using the stopping rule `abs(losses[-2] - losses[-1]) < tol`. Because of this, the gradient descent solution settles at a higher loss with smaller, finite coefficients, while the sklearn model continues toward much larger coefficient values. Even so, the two models make very similar predictions and agree on about 98.5% of the training data.
 
 
 ### 1(i) 
