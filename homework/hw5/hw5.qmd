@@ -1,0 +1,19 @@
+---
+title: "DATA 221 Homework 5"
+author: "Chris Low"
+format: pdf
+execute:
+  engine: python
+  python: /Users/chrislowzx/miniconda3/bin/python
+---
+
+
+# Problem 1
+
+### Exploratory Data Analysis
+```{python}
+import pandas as pd 
+epi = pd.read_csv("epi_r.csv", index_col = 'title')
+epi.head()
+```
+
