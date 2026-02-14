@@ -217,4 +217,143 @@ Therefore, if the goal is dimensionality reduction while retaining the main stru
 
 
 # Problem 2
+## 2(a)
+```{python}
+from sklearn.linear_model import LogisticRegressionCV
 
+# Define grid of C values
+C_grid = np.logspace(-4, 2, 10)
+
+# 2(a) Fit L1-regularized logistic regression with cross-validation
+logreg_cv = LogisticRegressionCV(
+    Cs=C_grid,
+    penalty="l1",
+    solver="saga",
+    cv=5,
+    scoring="roc_auc",
+    max_iter=1000,
+    random_state=42,
+    n_jobs=-1
+)
+
+logreg_cv.fit(X_train, y_train)
+```
+
+
+## 2(b)
+```{python}
+best_C = logreg_cv.C_[0]
+print(f"Optimal regularization parameter (C): {best_C:.4f}")
+```
+
+
+## 2(c)
+We need to find the test set AUC for classifier with optimal C
+```{python}
+y_test_prob = logreg_cv.predict_proba(X_test)[:, 1]
+test_auc = roc_auc_score(y_test, y_test_prob)
+
+print(f"Test set AUC of selected classifier: {test_auc:.4f}")
+```
+
+
+## 2(d) 
+```{python}
+coef_paths = []
+
+for C in C_grid:
+    model = LogisticRegression(
+        penalty="l1",
+        C=C,
+        solver="saga",
+        max_iter=1000,
+        random_state=42
+    )
+    model.fit(X_train, y_train)
+    coef_paths.append(model.coef_[0])
+
+coef_paths = np.array(coef_paths)
+
+plt.figure(figsize=(10,6))
+for j in range(coef_paths.shape[1]):
+    plt.plot(np.log10(C_grid), coef_paths[:, j], alpha=0.5)
+
+plt.xlabel("log10(C)")
+plt.ylabel("Coefficient Value")
+plt.title("L1 Logistic Regression Coefficient Paths")
+plt.axhline(0, color="black", linewidth=0.8)
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+
+
+
+```{python}
+# 2(a) Fit L1-regularized logistic regression across a grid of C values
+
+C_grid = np.logspace(-4, 2, 10)   # Strong to weak regularization
+
+auc_scores = []
+coef_paths = []
+
+for C in C_grid:
+    model = LogisticRegression(
+        penalty="l1",
+        C=C,
+        solver="saga",
+        max_iter=5000,
+        random_state=42,
+        n_jobs=-1
+    )
+    
+    model.fit(X_train, y_train)
+    
+    # Compute test AUC
+    y_prob = model.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, y_prob)
+    
+    auc_scores.append(auc)
+    coef_paths.append(model.coef_[0])
+```
+
+
+
+```{python}
+# 2(b) Select optimal C
+auc_scores = np.array(auc_scores)
+
+best_index = np.argmax(auc_scores)
+best_C = C_grid[best_index]
+
+print(f"Optimal regularization parameter (C): {best_C:.4f}")
+```
+
+
+
+```{python}
+# 2(c) Test set AUC of selected classifier
+best_AUC = auc_scores[best_index]
+
+print(f"Test set AUC of selected classifier: {best_AUC:.4f}")
+```
+
+
+```{python}
+# 2(d) Plot coefficient paths
+
+coef_paths = np.array(coef_paths)
+
+plt.figure(figsize=(10,6))
+
+for j in range(coef_paths.shape[1]):
+    plt.plot(np.log10(C_grid), coef_paths[:, j], alpha=0.5)
+
+plt.xlabel("log10(C)")
+plt.ylabel("Coefficient Value")
+plt.title("L1 Logistic Regression Coefficient Paths")
+plt.axhline(0, color="black", linewidth=0.8)
+plt.grid(alpha=0.3)
+
+plt.show()
+```
