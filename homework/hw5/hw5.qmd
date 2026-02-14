@@ -12,8 +12,209 @@ execute:
 
 ### Exploratory Data Analysis
 ```{python}
-import pandas as pd 
-epi = pd.read_csv("epi_r.csv", index_col = 'title')
-epi.head()
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+
+epi = pd.read_csv("epi_r.csv", index_col='title')
+
+# EDA
+print(f"Dataset shape: {epi.shape}")
+print(epi.info())
+
+nutritional_vars = ['calories', 'protein', 'fat', 'sodium']
+print(epi[nutritional_vars].describe())
+
+# Plotting to see the extreme outliers
+plt.figure(figsize=(10, 6))
+sns.boxplot(data=epi[nutritional_vars])
+plt.title("Nutritional Variables (Notice the extreme outliers)")
+plt.yscale('log') # Log scale: outliers are massive
+plt.show()
+
+# Check for missing values
+print("Missing values before imputation:\n", epi[nutritional_vars].isna().sum())
 ```
+
+
+I decided to pre-process mainly nutritional variables because they are numerical and directly relevant to the analysis we will be doing (PCA and regularized logistic regression). These variables are likely to have a significant impact on the outcome variable 'cake', which is what we will be trying to predict.
+
+The other features, such as Inredients, are not numerical and would require different pre-processing steps (like encoding) if we were to include them in the analysis. For the scope of this homework, we will focus on the nutritional variables as features for PCA and regularized logistic regression, and 'cake' as the outcome variable.
+
+
+Some pre-processing steps I will take include:
+
+1. Handling Missing Values: I will impute missing values using the median, as it is more robust to outliers than the mean.
+
+2. Handling Outliers: I will cap the values at the 99th percentile to mitigate the influence of extreme outliers without dropping too much data.
+
+3. Scaling the Features: I will standardize the features to have a mean of 0 and a standard deviation of 1, which is crucial for PCA and regularized logistic regression to perform well.
+
+```{python}
+# PRE-PROCESSING
+
+# Handle Missing Values (Median: as it is more robust to outliers than mean)
+for col in nutritional_vars:
+    epi[col] = epi[col].fillna(epi[col].median())
+
+# Handle Outliers (Capping at the 99th percentile). We do this so we don't
+# drop too much data, but we eliminate non-sensical values that are likely
+# data entry errors or extreme outliers that could skew our analysis.
+for col in nutritional_vars:
+    cap_value = epi[col].quantile(0.99)
+    epi[col] = np.where(epi[col] > cap_value, cap_value, epi[col])
+
+epi[nutritional_vars].skew()
+
+for col in nutritional_vars:
+    print(f"{col} skew before log:", epi[col].skew())
+
+    log_col = np.log1p(epi[col])
+    print(f"{col} skew after log:", log_col.skew())
+    print()
+```
+
+From the above code, the nutritional variables still show strong right skew ($\text{skewness} \approx 3$) after capping the 99 percentile. After applying a $log(1 + x)$ transformation, skewness decreased a lot toward zero, so this shows more symmetric distribution. This log transformation prior to scaling improves the stability of PCA.
+
+Moving onto the next steps, where are remove binary tags that are too rare (less than 20 occurrences) (because they are not informative for modeling) and then separate the outcome variable 'cake' from the features, and finally scale the features for PCA and regularized logistic regression.
+
+```{python}
+# Remove rare binary tags
+binary_cols = [col for col in epi.columns 
+               if set(epi[col].unique()).issubset({0,1})]
+
+min_count = 20
+rare_cols = [col for col in binary_cols 
+             if epi[col].sum() < min_count]
+
+epi = epi.drop(columns=rare_cols)
+
+# Separate outcome (i.e. cake) from features
+y = epi['cake']
+X = epi.drop(columns=['cake'])
+
+# Scale
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+```
+
+
+## 1(a) 
+```{python}
+from sklearn.decomposition import PCA
+
+pca = PCA()
+X_pca = pca.fit_transform(X_scaled)
+```
+
+
+## 1(b)
+```{python}
+# Transpose because pca.components_ has shape (n_components, n_features),
+# and we want (n_features, n_components) to align with our original features
+loadings = pca.components_.T
+
+pc1 = loadings[:, 0]
+pc2 = loadings[:, 1]
+
+plt.figure(figsize=(12,8))
+plt.scatter(pc1, pc2, alpha=0.5)
+
+plt.xlabel('PC1')
+plt.ylabel('PC2')
+plt.title('PCA Loadings: PC1 vs PC2')
+
+# Label strongest contributors to PC1 and PC2 (absolute loading > 0.1)
+for i, feature in enumerate(X.columns):
+    if abs(pc1[i]) > 0.1 or abs(pc2[i]) > 0.1:
+        plt.text(pc1[i], pc2[i], feature, fontsize=8)
+
+plt.show()
+```
+
+
+**Patterns:** 
+
+
+In the scatter plot of PC1 vs PC2, **most ingredient tags are clustered near the origin**, which suggests they do not strongly influence the first two principal components. This makes sense because many tags are sparse and do not vary consistently across recipes, so they do not drive the main directions of variation.
+
+**The nutritional variables (calories, fat, sodium, and protein) appear grouped together in the lower-left region.** This suggests that one of the components is capturing something like overall richness or heaviness, since these variables tend to increase together. We also see that **alcohol (wine, beer, liquor) tags cluster together in the upper-left area**, which may indicate that they contribute to a different dimension of variation related to alcoholic content or recipe type.
+
+**On the positive side of PC1, dietary restriction tags such as vegetarian, vegan, gluten-free, and dairy-free cluster together,** which suggests that PC1 may represent a dietary or health-conscious dimension.
+
+**Dessert stands out in the upper-right area of the plot,** indicating that it contributes differently from both the nutritional variables and alcohol-related tags. 
+
+Overall, the plot shows clear groupings of related features, showing that the first two principal components capture meaningful structure in the dataset rather than random noise.
+
+
+## 1(c)
+```{python}
+explained_variance = pca.explained_variance_ratio_
+cumulative_variance = explained_variance.cumsum()
+
+print("Number of components:", len(pca.explained_variance_ratio_))
+print("First 10 explained variances:")
+print(explained_variance[:10])
+
+print("Cumulative variance (first 10):")
+print(cumulative_variance[:10])
+
+print("Explained by PC1:", explained_variance[0])
+print("Explained by PC2:", explained_variance[1])
+print("Total explained by PC1 + PC2:", explained_variance[0] + explained_variance[1])
+```
+
+
+```{python}
+plt.figure(figsize=(8,5))
+plt.plot(cumulative_variance)
+plt.xlabel("Number of Principal Components")
+plt.ylabel("Cumulative Variance Explained")
+plt.title("Cumulative Variance Explained by PCA")
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+Scree plot: 
+```{python}
+plt.figure(figsize=(8,5))
+
+plt.plot(range(1, len(pca.explained_variance_) + 1),
+         pca.explained_variance_,
+         marker='o')
+
+plt.xlabel("Principal Component")
+plt.ylabel("Eigenvalue")
+plt.title("Scree Plot")
+plt.grid(alpha=0.3)
+
+plt.show()
+
+```
+
+
+Based on the scree plot, I cannot see a clear "elbow". However, there is a noticeable drop in eigenvalues after the first few components. I decided to use the \href{https://kneed.readthedocs.io/en/stable/}{KneeLocator} method to identify the optimal number of components. 
+
+```{python}
+from kneed import KneeLocator
+
+x = range(1, len(pca.explained_variance_)+1)
+knee = KneeLocator(x, pca.explained_variance_, curve='convex', direction='decreasing')
+
+print("Knee at component:", knee.knee)
+```
+
+**PC1 explains approximately 1.67% of the variance and PC2 explains approximately 1.41%, for a total of about 3.08%.** 
+
+**From the scree plot and the KneeLocator result, we see that the optimal number of components is around 30–40 (33 specifically).** After this point, each additional component contributes only a small incremental amount of variance.
+
+Therefore, if the goal is dimensionality reduction while retaining the main structures in the data, I would select roughly 30–40 principal components. However, to capture a large fraction of total variance (such as 80%), many more components would be required (around 200+), which may not be practical for modeling. 
+
+
+\newpage
+
+
+# Problem 2
 
