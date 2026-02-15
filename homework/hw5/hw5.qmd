@@ -219,85 +219,33 @@ Therefore, if the goal is dimensionality reduction while retaining the main stru
 # Problem 2
 ## 2(a)
 ```{python}
-from sklearn.linear_model import LogisticRegressionCV
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Define grid of C values
-C_grid = np.logspace(-4, 2, 10)
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
 
-# 2(a) Fit L1-regularized logistic regression with cross-validation
-logreg_cv = LogisticRegressionCV(
-    Cs=C_grid,
-    penalty="l1",
-    solver="saga",
-    cv=5,
-    scoring="roc_auc",
-    max_iter=1000,
+from sklearn.model_selection import train_test_split
+
+X_model = X_pca   # from Problem 1
+y_model = y
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_model,
+    y_model,
+    test_size=0.3,
     random_state=42,
-    n_jobs=-1
+    stratify=y_model
 )
 
-logreg_cv.fit(X_train, y_train)
-```
-
-
-## 2(b)
-```{python}
-best_C = logreg_cv.C_[0]
-print(f"Optimal regularization parameter (C): {best_C:.4f}")
-```
-
-
-## 2(c)
-We need to find the test set AUC for classifier with optimal C
-```{python}
-y_test_prob = logreg_cv.predict_proba(X_test)[:, 1]
-test_auc = roc_auc_score(y_test, y_test_prob)
-
-print(f"Test set AUC of selected classifier: {test_auc:.4f}")
-```
-
-
-## 2(d) 
-```{python}
-coef_paths = []
-
-for C in C_grid:
-    model = LogisticRegression(
-        penalty="l1",
-        C=C,
-        solver="saga",
-        max_iter=1000,
-        random_state=42
-    )
-    model.fit(X_train, y_train)
-    coef_paths.append(model.coef_[0])
-
-coef_paths = np.array(coef_paths)
-
-plt.figure(figsize=(10,6))
-for j in range(coef_paths.shape[1]):
-    plt.plot(np.log10(C_grid), coef_paths[:, j], alpha=0.5)
-
-plt.xlabel("log10(C)")
-plt.ylabel("Coefficient Value")
-plt.title("L1 Logistic Regression Coefficient Paths")
-plt.axhline(0, color="black", linewidth=0.8)
-plt.grid(alpha=0.3)
-plt.show()
-```
-
-
-
-
-```{python}
-# 2(a) Fit L1-regularized logistic regression across a grid of C values
-
-C_grid = np.logspace(-4, 2, 10)   # Strong to weak regularization
+C_grid = np.logspace(-3, 0, 6)   # Strong to weak regularization
 
 auc_scores = []
 coef_paths = []
 
-for C in C_grid:
+for i, C in enumerate(C_grid):
+    print(f"Fitting model {i+1}/{len(C_grid)} with C={C}")
+
     model = LogisticRegression(
         penalty="l1",
         C=C,
@@ -320,7 +268,6 @@ for C in C_grid:
 
 
 ```{python}
-# 2(b) Select optimal C
 auc_scores = np.array(auc_scores)
 
 best_index = np.argmax(auc_scores)
@@ -332,7 +279,6 @@ print(f"Optimal regularization parameter (C): {best_C:.4f}")
 
 
 ```{python}
-# 2(c) Test set AUC of selected classifier
 best_AUC = auc_scores[best_index]
 
 print(f"Test set AUC of selected classifier: {best_AUC:.4f}")
@@ -340,8 +286,6 @@ print(f"Test set AUC of selected classifier: {best_AUC:.4f}")
 
 
 ```{python}
-# 2(d) Plot coefficient paths
-
 coef_paths = np.array(coef_paths)
 
 plt.figure(figsize=(10,6))
@@ -357,3 +301,131 @@ plt.grid(alpha=0.3)
 
 plt.show()
 ```
+
+
+
+\newpage
+
+# Problem 3 
+
+## 3(a) 
+```{python}
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+X_full = epi.copy()
+
+# Scale all features
+scaler_full = StandardScaler()
+X_full_scaled = scaler_full.fit_transform(X_full)
+
+K_values = range(2, 18)
+within_cluster_var = []
+
+for K in K_values:
+    kmeans = KMeans(
+        n_clusters=K,
+        random_state=42,
+        n_init=20
+    )
+    
+    kmeans.fit(X_full_scaled)
+    within_cluster_var.append(kmeans.inertia_)  # inertia = WCSS
+```
+
+
+### 3(b)
+```{python}
+# Elbow plot
+plt.figure(figsize=(8,5))
+plt.plot(K_values, within_cluster_var, marker='o')
+plt.xlabel("Number of Clusters (K)")
+plt.ylabel("Within-Cluster Sum of Squares")
+plt.title("Elbow Plot for K-Means Clustering")
+plt.grid(alpha=0.3)
+plt.show()
+```
+
+
+```{python}
+best_K = 6 
+
+kmeans_final = KMeans(
+    n_clusters=best_K,
+    random_state=42,
+    n_init=20
+)
+
+cluster_labels = kmeans_final.fit_predict(X_full_scaled)   
+```
+
+The elbow plot does not show a sharp bend. The within-cluster variance decreases smoothly as K increases. However, the rate of decrease slows after approximately K = 6. After this, adding more clusters results in only small reductions in within-cluster variance. So, K = 6 was selected. 
+
+
+## 3(c)
+```{python}
+from sklearn.decomposition import PCA
+
+pca_all = PCA()
+X_pca_all = pca_all.fit_transform(X_full_scaled)
+explained_var = pca_all.explained_variance_ratio_
+
+pc_pairs = [(0,1), (2,3), (4,5), (6,7), (8,9)]
+
+fig, axes = plt.subplots(3, 2, figsize=(15,18))
+axes = axes.flatten()
+
+for i, (pc_x, pc_y) in enumerate(pc_pairs):
+    scatter = axes[i].scatter(
+        X_pca_all[:, pc_x],
+        X_pca_all[:, pc_y],
+        c=cluster_labels,
+        cmap="tab10",
+        alpha=0.5,
+        s=4
+    )
+    
+    axes[i].set_xlabel(f"PC{pc_x+1} ({explained_var[pc_x]*100:.2f}% var)")
+    axes[i].set_ylabel(f"PC{pc_y+1} ({explained_var[pc_y]*100:.2f}% var)")
+    axes[i].set_title(f"PC{pc_x+1} vs PC{pc_y+1}")
+    
+    legend = axes[i].legend(*scatter.legend_elements(), title="Cluster")
+    axes[i].add_artist(legend)
+
+fig.delaxes(axes[5])
+
+plt.tight_layout()
+plt.show()
+```
+
+
+We see that PC1 explains about $1.66\%$ of the variance and PC2 explains about $1.42\%$. These values are small, but that makes sense since the dataset has many features and the variance is spread out across them.
+
+In the PC1 vs PC2 plot, one cluster is clearly separated along PC1, but the others overlap quite a bit. This suggests that the clusters are not fully separated in just the first two components and that the structure exists across multiple dimensions.
+
+
+
+## 3(d) 
+We are adding the cluster labels back to the original dataset and then calculating the average feature values for each cluster. This allows us to understand the characteristics of each cluster by looking at which features have higher or lower average values within that cluster compared to others. 
+```{python}
+epi_with_clusters = epi.copy()
+epi_with_clusters["cluster"] = cluster_labels
+
+# Average feature values per cluster
+cluster_summary = epi_with_clusters.groupby("cluster").mean()
+
+cluster_summary.head()
+```
+
+```{python}
+for c in range(best_K):
+    print(f"\nCluster {c}")
+    print(cluster_summary.loc[c].sort_values(ascending=False).head(10))
+```
+
+**Interpretation of Clusters:** 
+
+**Cluster 0 seems to represent savory main dishes**, since it has relatively high sodium, calories, and protein, along with tags like ham. **Cluster 1 is clearly alcoholic drinks**, given the very high drink and alcoholic tags and low protein and fat. **Cluster 2 looks like more everyday or lighter meals**, with moderate nutrition values and tags such as "quick and easy" and "vegetarian". **Cluster 3 appears to be desserts**, since the dessert tag is very high and the nutrition profile fits baked goods. **Cluster 4** stands out as very high in calories, fat, and protein, suggesting **large or rich dinner entrées, or high-protein dishes**. Finally, **Cluster 5 seems to group together dietary-restriction recipes**, with very high peanut-free, soy-free, and pescatarian tags. Overall, most of the clusters are fairly interpretable, even though there is still some overlap between them.
