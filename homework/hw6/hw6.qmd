@@ -9,3 +9,221 @@ execute:
 
 
 # Problem 1
+
+## a).
+```{python}
+import pandas as pd
+import torch
+
+url = "https://vincentarelbundock.github.io/Rdatasets/csv/carData/TitanicSurvival.csv"
+df = pd.read_csv(url)
+
+df.head()
+```
+
+
+```{python}
+# Drop the rownames column and any rows with missing values
+df = df.drop(columns=['rownames'])
+df = df.dropna()
+
+# Map the 'survived' and 'sex' columns to binary values
+df['survived'] = df['survived'].map({'yes': 1, 'no': 0})
+df['sex'] = df['sex'].map({'male': 0, 'female': 1})
+
+# Map the 'passengerClass' column to numerical values
+df['passengerClass'] = df['passengerClass'].map({
+    '1st': 1,
+    '2nd': 2,
+    '3rd': 3
+})
+
+# Separate our features and target variable
+X = df[['age', 'sex', 'passengerClass']]
+y = df['survived']
+
+# As mentioned, center the columns of the predictors
+X_centered = X - X.mean()
+
+X_tensor = torch.tensor(X_centered.values, dtype=torch.float32)
+y_tensor = torch.tensor(y.values, dtype=torch.float32).view(-1, 1)
+```
+
+```{python}
+print(X_tensor.shape)
+print(y_tensor.shape)
+
+print(X_tensor[:5])
+print(y_tensor[:5])
+```
+
+
+
+## b).
+```{python}
+def sigmoid(z):
+    return 1.0 / (1.0 + torch.exp(-z))
+
+def forward_pass(X_in, w):
+    z = torch.matmul(X_in, w)
+    return sigmoid(z)
+
+# Generate three random weights
+torch.manual_seed(42)
+weights = torch.randn(3, 1, dtype=torch.float32)
+
+# (29yo, female=1, 1st class=1) 
+raw_passenger = torch.tensor([29.0, 1.0, 1.0], dtype=torch.float32)
+
+means_tensor = torch.tensor(X.mean().values, dtype=torch.float32)
+centered_passenger = raw_passenger - means_tensor
+
+centered_passenger = centered_passenger.view(1, -1)
+
+probability = forward_pass(centered_passenger, weights)
+
+print(f"Probability of survival (29yo, female, 1st class): {probability.item():.4f}")
+```
+
+ 
+## c). Cross entropy loss and backward pass
+```{python}
+def cross_entropy_loss(y_pred, y_true):
+    """
+    Two-class cross-entropy loss function for binary classification.
+    """
+    eps = 1e-15
+    y_pred = torch.clamp(y_pred, eps, 1 - eps)
+    return -torch.mean(y_true * torch.log(y_pred) + (1.0 - y_true) * torch.log(1.0 - y_pred))
+
+test_target = torch.tensor([[1.0]], dtype=torch.float32)  # Given survival
+passenger_loss = cross_entropy_loss(probability, test_target)
+print(f"Cross Entropy Loss for this passenger: {passenger_loss.item():.4f}")
+```
+
+
+```{python}
+# Alternatively, we can use pyTorch's built-in loss function: loss.backward()
+def backward_pass(X_in, y_pred, y_true):
+    # Gradient of binary cross entropy loss with respect to weights w
+    N = X_in.shape[0]
+    gradient = torch.matmul(X_in.t(), (y_pred - y_true)) / N
+    return gradient
+
+gradient = backward_pass(centered_passenger, probability, test_target)
+print("Gradient of loss with respect to weights:")
+print(gradient)
+```
+
+
+## d). 
+```{python}
+import matplotlib.pyplot as plt
+
+learning_rate = 1e-5
+epochs = 1000
+
+torch.manual_seed(42)
+weights = torch.randn(3, 1, dtype=torch.float32)
+
+loss_history = []
+grad_history = []
+
+for epoch in range(epochs):
+    y_pred = forward_pass(X_tensor, weights)
+    
+    loss = cross_entropy_loss(y_pred, y_tensor)
+    grad = backward_pass(X_tensor, y_pred, y_tensor)
+
+    weights = weights - learning_rate * grad
+    
+    loss_history.append(loss.item())
+    grad_history.append(torch.norm(grad).item())
+
+print("Final Loss:", loss_history[-1])
+```
+
+```{python}
+# Loss vs Epoch plot
+plt.figure()
+plt.plot(loss_history)
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Loss vs Epoch (lr = 1e-5)")
+plt.show()
+```
+
+```{python}
+# Gradient Norm vs Epoch plot
+plt.figure()
+plt.plot(grad_history)
+plt.xlabel("Epoch")
+plt.ylabel("Gradient Norm")
+plt.title("Gradient vs Epoch (lr = 1e-5)")
+plt.show()
+```
+
+
+## e). 
+```{python}
+def train_model(lr, epochs=1000):
+    torch.manual_seed(42)
+    weights = torch.randn(3, 1, dtype=torch.float32)
+    
+    loss_hist_list = []
+    
+    for epoch in range(epochs):
+        y_pred = forward_pass(X_tensor, weights)
+        loss = cross_entropy_loss(y_pred, y_tensor)
+        grad = backward_pass(X_tensor, y_pred, y_tensor)
+        weights = weights - lr * grad
+        loss_hist_list.append(loss.item())
+    
+    return loss_hist_list
+
+learning_rates = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+
+res = {}
+
+for lr in learning_rates:
+    res[lr] = train_model(lr)
+
+plt.figure()
+
+for lr in learning_rates:
+    plt.plot(res[lr], label=f"lr={lr}")
+
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Loss vs Epoch for Different Learning Rates")
+plt.legend()
+plt.show()
+```
+
+
+## f).
+```{python}
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
+target_rates = [0.01, 0.0001, 0.000001]
+actual_labels = y_tensor.numpy()
+
+fig, ax_row = plt.subplots(1, 3, figsize=(15, 5))
+
+for i in range(len(target_rates)):
+    current_lr = target_rates[i]
+
+    raw_probs = final_preds[current_lr].numpy()
+    binary_predictions = (raw_probs >= 0.5).astype(int)
+    
+    matrix_data = confusion_matrix(actual_labels, binary_predictions)
+    sns.heatmap(matrix_data, annot=True, fmt='d', cmap='Blues', ax=ax_row[i])
+
+    ax_row[i].set_title(f"LR: {current_lr}")
+    ax_row[i].set_xlabel("Predicted Label")
+    ax_row[i].set_ylabel("True Label")
+
+plt.tight_layout()
+plt.show()
+```
