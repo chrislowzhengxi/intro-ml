@@ -179,14 +179,19 @@ def train_model(lr, epochs=1000):
         weights = weights - lr * grad
         loss_hist_list.append(loss.item())
     
-    return loss_hist_list
+    final_predictions = forward_pass(X_tensor, weights)
+    
+    return loss_hist_list, final_predictions
 
 learning_rates = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 
 res = {}
+final_preds = {}
 
 for lr in learning_rates:
-    res[lr] = train_model(lr)
+    losses, preds = train_model(lr)
+    res[lr] = losses
+    final_preds[lr] = preds
 
 plt.figure()
 
@@ -199,6 +204,23 @@ plt.title("Loss vs Epoch for Different Learning Rates")
 plt.legend()
 plt.show()
 ```
+
+**When comparing the loss curves for the different learning rates, the main difference is how fast the model learns.**
+
+With 0.01, the loss drops very quickly and reaches the lowest final value. This learning rate seems to work the best within 1000 epochs.
+
+
+With 0.001, the loss also decreases quickly but levels off slightly higher than 0.01.
+
+
+With 0.0001, the loss decreases much more slowly. It improves over time but does not reach as low a value.
+
+
+With 1e-5 and 1e-6, the loss barely changes. The model is learning very slowly.
+
+
+Overall, larger learning rates converge faster and reach lower loss values in the same number of epochs. Very small learning rates result in slow training and higher final loss within the fixed 1000 epochs.
+
 
 
 ## f).
@@ -227,3 +249,241 @@ for i in range(len(target_rates)):
 plt.tight_layout()
 plt.show()
 ```
+
+For learning rate $0.01$, the model performs the best. It has the highest accuracy (about $76\%$) and the largest number of true positives and true negatives. It also has fewer false positives and false negatives compared to the other two. This shows that it converged well.
+
+For $0.0001$, performance is much worse. The accuracy is only about $41\%$. The model produces a large number of false positives and false negatives. This suggests it did not converge within 1000 epochs.
+
+For $1e^-6$, the accuracy is around $51\%$, which is slightly better than $0.0001$. However, this does not mean it learned more. The model barely trained and behaves closer to a weak baseline classifier. It predicts many negatives, which happens to give slightly better accuracy on this dataset.
+
+**Overall, 0.01 clearly gives the best classification results. The smaller learning rates did not converge enough within 1000 epochs.**
+
+
+\newpage
+
+
+# Problem 2
+
+## a). 
+Note: Dataset preprocessing is mostly the same as in Homework 5, but we will convert the data to PyTorch tensors for this problem.
+
+```{python}
+import pandas as pd
+import numpy as np
+import torch
+from sklearn.preprocessing import StandardScaler
+
+epi = pd.read_csv("../hw5/epi_r.csv", index_col='title')
+
+print(f"Original dataset shape: {epi.shape}")
+
+
+nutritional_vars = ['calories', 'protein', 'fat', 'sodium']
+
+binary_cols = [col for col in epi.columns 
+               if set(epi[col].dropna().unique()).issubset({0,1})]
+
+# Median imputation for nutritional variables
+for col in nutritional_vars:
+    epi[col] = epi[col].fillna(epi[col].median())
+
+epi[binary_cols] = epi[binary_cols].fillna(0)
+
+for col in nutritional_vars:
+    cap_value = epi[col].quantile(0.99)
+    epi[col] = np.where(epi[col] > cap_value, cap_value, epi[col])
+
+# Log transform numeric variables
+for col in nutritional_vars:
+    epi[col] = np.log1p(epi[col])
+
+min_count = 20
+rare_cols = [col for col in binary_cols 
+             if epi[col].sum() < min_count]
+
+epi = epi.drop(columns=rare_cols)
+
+print(f"Shape after removing rare tags: {epi.shape}")
+
+
+y = epi['cake']
+X = epi.drop(columns=['cake'])
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_recipe_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+
+print("Final tensor shape:", X_recipe_tensor.shape)
+```
+
+
+## b). 
+```{python}
+import torch.nn as nn
+
+class AutoEncoder(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 10)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(10, 256),
+            nn.ReLU(),
+            nn.Linear(256, input_dim)
+        )
+
+    def forward(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded, encoded
+
+input_dim = X_recipe_tensor.shape[1]
+model = AutoEncoder(input_dim)
+print(model)
+```
+
+
+## c).
+```{python}
+import torch.nn as nn
+import torch.optim as optim
+
+input_dim = X_recipe_tensor.shape[1]
+
+model = AutoEncoder(input_dim)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+```
+
+
+## d).
+```{python}
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+
+X_recipe_tensor = X_recipe_tensor.to(torch.float32)
+
+print("Tensor shape:", X_recipe_tensor.shape)
+
+epochs = 100
+batch_size = 256
+learning_rate = 0.001
+
+dataset = TensorDataset(X_recipe_tensor)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+input_dim = X_recipe_tensor.shape[1]
+model = AutoEncoder(input_dim)
+
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+loss_history = []
+
+model.train()
+
+for epoch in range(epochs):
+    epoch_loss = 0.0
+    
+    for batch in dataloader:
+        X_batch = batch[0]
+        
+        optimizer.zero_grad()
+        
+        reconstructed, encoded = model(X_batch)
+        
+        loss = criterion(reconstructed, X_batch)
+        
+        loss.backward()
+        optimizer.step()
+        
+        epoch_loss += loss.item()
+    
+    epoch_loss /= len(dataloader)
+    loss_history.append(epoch_loss)
+    
+    print(f"Epoch [{epoch+1}/{epochs}] - Loss: {epoch_loss:.6f}")
+```
+
+
+## e).
+```{python}
+model.eval()
+
+with torch.no_grad():
+    _, latent = model(X_recipe_tensor)
+
+latent = latent.numpy()
+
+print(latent.shape)
+```
+
+
+Re-create cluster labels: 
+```{python}
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+
+X_full = X.copy()
+
+scaler_full = StandardScaler()
+X_full_scaled = scaler_full.fit_transform(X_full)
+
+# From HW5, we found that K=6 is the best choice based on the elbow method and silhouette scores.
+best_K = 6
+
+kmeans_final = KMeans(
+    n_clusters=best_K,
+    random_state=42,
+    n_init=20
+)
+
+cluster_labels = kmeans_final.fit_predict(X_full_scaled)
+
+print("Cluster labels shape:", cluster_labels.shape)
+```
+
+```{python}
+import matplotlib.pyplot as plt
+
+feature_pairs = [(0,1), (2,3), (4,5), (6,7), (8,9)]
+
+fig, axes = plt.subplots(3, 2, figsize=(15,18))
+axes = axes.flatten()
+
+for i, (f1, f2) in enumerate(feature_pairs):
+    scatter = axes[i].scatter(
+        latent[:, f1],
+        latent[:, f2],
+        c=cluster_labels,
+        cmap="tab10",
+        alpha=0.5,
+        s=4
+    )
+    
+    axes[i].set_xlabel(f"Feature {f1+1}")
+    axes[i].set_ylabel(f"Feature {f2+1}")
+    axes[i].set_title(f"Feature {f1+1} vs Feature {f2+1}")
+    
+    legend = axes[i].legend(*scatter.legend_elements(), title="Cluster")
+    axes[i].add_artist(legend)
+
+fig.delaxes(axes[5])
+
+plt.tight_layout()
+plt.show()
+```
+
+
+In Homework 5, the PCA plots, especially PC1 vs PC2, showed clearer separation between some of the clusters. Certain groups stretched in different directions, and a few clusters were visibly more distinct along the first principal components.
+
+In contrast, the autoencoder feature plots look more mixed. While there are slight tendencies for some clusters to lean in certain directions (for example, cluster 3 leans towards the top left in feature 1-2 and feature 3-4), the separation is not nearly as clean in any single two-dimensional projection. Most of the points overlap heavily.
+
+This makes sense because PCA is explicitly finding directions of maximum variance, which can exaggerate separation along the first few components. The autoencoder, however, is trained to reconstruct the data rather than to spread it out. So, it compresses recipes into a dense latent space where cluster boundaries are less visually obvious. 
